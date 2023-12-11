@@ -1,7 +1,7 @@
 .PHONY: test clean update
 
 test : expected.txt results.txt
-	diff -s expected.txt results.txt
+	diff expected.txt results.txt && echo results MATCH
 
 PROGRAMS = one.awk two.awk
 INPUTS = sample.txt input.txt
