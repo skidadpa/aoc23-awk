@@ -1,15 +1,9 @@
 #!/usr/bin/env gawk -f
+function report_error(e) { if (_exit_code) exit _exit_code
+                           if (e) { print e; exit _exit_code=1 } }
 BEGIN {
 }
-{
-    if (_error) {
-        print "DATA ERROR"
-        exit _exit=1
-    }
-}
 END {
-    if (_exit) {
-        exit _exit
-    }
+    report_error()
     print NR
 }
