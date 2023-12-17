@@ -12,29 +12,33 @@ BEGIN {
     UP = 3
 
     split("", TURN["."])
-    split("", ADD["."])
+    split("", SPLIT["."])
 
     TURN["/"][RIGHT] = UP
     TURN["/"][DOWN] = LEFT
     TURN["/"][LEFT] = DOWN
     TURN["/"][UP] = RIGHT
-    split("", ADD["/"])
+    split("", SPLIT["/"])
 
     TURN["\\"][RIGHT] = DOWN
     TURN["\\"][DOWN] = RIGHT
     TURN["\\"][LEFT] = UP
     TURN["\\"][UP] = LEFT
-    split("", ADD["\\"])
+    split("", SPLIT["\\"])
 
     TURN["|"][RIGHT] = DOWN
     TURN["|"][LEFT] = UP
-    ADD["|"][RIGHT] = UP
-    ADD["|"][LEFT] = DOWN
+    SPLIT["|"][RIGHT] = UP
+    SPLIT["|"][LEFT] = DOWN
 
     TURN["-"][DOWN] = LEFT
     TURN["-"][UP] = RIGHT
-    ADD["-"][DOWN] = RIGHT
-    ADD["-"][UP] = LEFT
+    SPLIT["-"][DOWN] = RIGHT
+    SPLIT["-"][UP] = LEFT
+
+    split("", splitter_starts)
+    SPLIT_START["|"] = RIGHT
+    SPLIT_START["-"] = DOWN
 }
 !width { width = NF }
 width != NF { report_error("DATA ERROR: width changed from " width " to " NF) }
@@ -42,6 +46,9 @@ $0 !~ /^[-|./\\]+$/ { report_error("DATA ERROR: unrecognized row " $0) }
 {
     for (c = 1; c <= NF; ++c) {
         grid[c,NR] = $c
+        if ($c in SPLIT_START) {
+            splitter_starts[c,NR] = SPLIT_START[$c]
+        }
     }
 }
 function move(loc, direction,   coords) {
@@ -84,6 +91,67 @@ function facing(direction) {
 END {
     report_error()
     height = NR
+    if (DEBUG) {
+        print "calculating splitter effects"
+    }
+    split("", splitter_energizes)
+    for (splitter_location in splitter_starts) {
+        split("", starting_direction)
+        split("", starting_location)
+        nbeams = 0
+        starting_direction[++nbeams] = splitter_starts[splitter_location]
+        starting_location[nbeams] = splitter_location
+        split("", energized)
+        split("", visited)
+        for (beam = 1; beam <= nbeams; ++beam) {
+            direction = starting_direction[beam]
+            location = starting_location[beam]
+            if (DEBUG > 2) {
+                print "beam", beam, "facing", facing(direction), "at", coordinates(location)
+            }
+            while (location in grid) {
+                if (DEBUG > 2) {
+                    print " energizing", coordinates(location)
+                }
+                energized[location] = 1
+                if ((location SUBSEP direction) in visited) {
+                    location = 0 SUBSEP 0
+                    continue
+                }
+                visited[location, direction] = 1
+                tile = grid[location]
+                if (direction in SPLIT[tile]) {
+                    if (location in splitter_energizes) {
+                        for (e in splitter_energizes[location]) {
+                            energized[e] = 1
+                        }
+                        location = 0 SUBSEP 0
+                        continue
+                    }
+                    new_direction = SPLIT[tile][direction]
+                    new_location = move(location, new_direction)
+                    starting_direction[++nbeams] = new_direction
+                    starting_location[nbeams] = new_location
+                    if (DEBUG > 2) {
+                        print " new beam", nbeams, "facing", facing(new_direction), "at", coordinates(new_location)
+                    }
+                }
+                if (direction in TURN[tile]) {
+                    direction = TURN[tile][direction]
+                    if (DEBUG > 2) {
+                        print " turning", facing(direction)
+                    }
+                }
+                location = move(location, direction)
+                if (DEBUG > 2) {
+                    print " moving to", coordinates(location)
+                }
+            }
+        }
+        for (e in energized) {
+            splitter_energizes[splitter_location][e] = 1
+        }
+    }
     nstarts = 0
     for (r = 1; r <= height; ++r) {
         entry_direction[++nstarts] = RIGHT
@@ -97,10 +165,14 @@ END {
         entry_direction[++nstarts] = UP
         entry_location[nstarts] = c SUBSEP height
     }
+    if (DEBUG) {
+        print "checking all starts"
+    }
     max_energized = 0
     for (start = 1; start <= nstarts; ++start) {
         split("", starting_direction)
         split("", starting_location)
+        nbeams = 0
         starting_direction[++nbeams] = entry_direction[start]
         starting_location[nbeams] = entry_location[start]
         split("", energized)
@@ -122,14 +194,18 @@ END {
                 }
                 visited[location, direction] = 1
                 tile = grid[location]
-                if (direction in ADD[tile]) {
-                    new_direction = ADD[tile][direction]
-                    new_location = move(location, new_direction)
-                    starting_direction[++nbeams] = new_direction
-                    starting_location[nbeams] = new_location
-                    if (DEBUG > 1) {
-                        print " new beam", nbeams, "facing", facing(new_direction), "at", coordinates(new_location)
+                if (direction in SPLIT[tile]) {
+                    if (!(location in splitter_energizes)) {
+                        report_error("PROCESSING ERROR, splitter not found at " coordinates(location))
                     }
+                    for (e in splitter_energizes[location]) {
+                        energized[e] = 1
+                    }
+                    if (DEBUG > 1) {
+                        print " splitter encountered at", coordinates(new_location)
+                    }
+                    location = 0 SUBSEP 0
+                    continue
                 }
                 if (direction in TURN[tile]) {
                     direction = TURN[tile][direction]
